@@ -1,11 +1,17 @@
-api = "0.8"
-WithWindowsBuild = false
-WithLinuxBuild = false
+api = "0.10"
 
 [buildpack]
-  id = "kilterset/nginx"
-  version = "1.0.0"
+id = "kilterset/nginx"
+version = "1.0.0"
+name = "nginx"
+
+[[stacks]]
+id = "*"
 
 [[targets]]
-  os = "darwin"
-  arch = "arm64"
+os = "linux"
+arch = "arm64"
+
+[[targets]]
+os = "linux"
+arch = "amd64"

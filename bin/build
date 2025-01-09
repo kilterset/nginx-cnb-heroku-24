@@ -2,8 +2,52 @@
 
 set -euo pipefail
 
-layers_dir="$1"
-env_dir="$2/env"
-plan_path="$3"
+NGINX_BUILD_DIR="${CNB_LAYERS_DIR}/nginx"
+NGINX_TAG=${NGINX_TAG:-"stable-1.26"}
 
-exit 0
+if [[ -f "${NGINX_BUILD_DIR}/nginx-tag" ]] && grep -q "$NGINX_TAG" "${NGINX_BUILD_DIR}/nginx-tag"; then
+  echo "Using nginx $(cat ${NGINX_BUILD_DIR}/nginx-tag) from cache"
+else
+  echo "Building nginx $NGINX_TAG"
+
+  mkdir -p "${NGINX_BUILD_DIR}/bin"
+  mkdir -p "${NGINX_BUILD_DIR}/logs"
+  mkdir -p "${NGINX_BUILD_DIR}/modules"
+  mkdir -p "${NGINX_BUILD_DIR}/source"
+
+  # Clone and build nginx
+  git clone --depth 1 --branch "${NGINX_TAG}" https://github.com/nginx/nginx.git "${NGINX_BUILD_DIR}/source"
+  pushd "${NGINX_BUILD_DIR}/source" 1> /dev/null
+
+  auto/configure \
+    --prefix="${NGINX_BUILD_DIR}" \
+    --sbin-path=bin/nginx \
+    --with-http_gzip_static_module \
+    --with-http_gunzip_module
+
+  make 1> /dev/null
+  make install 1> /dev/null
+
+  # Clean up source directory
+  popd 1> /dev/null
+  rm -rf "${NGINX_BUILD_DIR}/source"
+
+  # Copy default nginx configuration
+  cp -f "${CNB_BUILDPACK_DIR}/conf/nginx.conf" "${NGINX_BUILD_DIR}/conf/nginx.conf.template"
+
+  echo "${NGINX_TAG}" > "${NGINX_BUILD_DIR}/nginx-tag"
+fi
+
+cat > "${CNB_LAYERS_DIR}/nginx.toml" << EOL
+[types]
+build = true
+cache = true
+launch = true
+EOL
+
+cat > "${CNB_LAYERS_DIR}/launch.toml" << EOL
+[[processes]]
+type = "web"
+command = ["/bin/bash", "-c", "envsubst < ${NGINX_BUILD_DIR}/conf/nginx.conf.template > ${NGINX_BUILD_DIR}/conf/nginx.conf && nginx"]
+default = true
+EOL
